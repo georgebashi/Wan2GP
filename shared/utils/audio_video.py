@@ -316,13 +316,13 @@ def _get_codec_params(codec_type, container):
         return {'codec': 'libx264', 'quality': 10, 'pixelformat': 'yuv420p'}
     elif codec_type == 'libx264_18':
         # CRF 18 - visually lossless for most content
-        return {'codec': 'libx264', 'quality': 18, 'pixelformat': 'yuv420p'}
+        return {'codec': 'libx264', 'output_params': ['-crf', '18'], 'pixelformat': 'yuv420p'}
     elif codec_type == 'libx264_23':
         # CRF 23 is ffmpeg default - good balance of quality and size
-        return {'codec': 'libx264', 'quality': 23, 'pixelformat': 'yuv420p'}
+        return {'codec': 'libx264', 'output_params': ['-crf', '23'], 'pixelformat': 'yuv420p'}
     elif codec_type == 'libx264_28':
         # CRF 28 - smaller files, still decent quality
-        return {'codec': 'libx264', 'quality': 28, 'pixelformat': 'yuv420p'}
+        return {'codec': 'libx264', 'output_params': ['-crf', '28'], 'pixelformat': 'yuv420p'}
     elif codec_type == 'libx265_28':
         return {'codec': 'libx265', 'pixelformat': 'yuv420p', 'output_params': ['-crf', '28', '-x265-params', 'log-level=none','-hide_banner', '-nostats']}
     elif codec_type == 'libx265_8':
