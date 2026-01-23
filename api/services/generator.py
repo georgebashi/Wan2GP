@@ -117,6 +117,14 @@ class GeneratorService:
         # Start with primary settings as defaults
         inputs = self._wgp.primary_settings.copy()
 
+        # Apply finetune/model-specific settings (these override primary_settings)
+        model_def = self._wgp.get_model_def(model_type)
+        if model_def:
+            # Copy non-model keys from finetune definition (e.g., num_inference_steps, guidance_scale)
+            for key, value in model_def.items():
+                if key != "model" and not key.startswith("_"):
+                    inputs[key] = value
+
         # Handle base64 images - decode to PIL Image objects
         for img_field in ["image_start", "image_end"]:
             if img_field in params and params[img_field]:
