@@ -5,8 +5,6 @@ Generator Service - Wraps the existing generate_video function for API use.
 import uuid
 import inspect
 import base64
-import tempfile
-import os
 from typing import Dict, Any, Callable, Optional
 from dataclasses import dataclass, field
 from PIL import Image
@@ -37,10 +35,10 @@ class GeneratorService:
             self._wgp = wgp
             self._wgp_imported = True
 
-    def _decode_base64_image(self, data: str) -> Optional[str]:
+    def _decode_base64_image(self, data: str) -> Optional[Image.Image]:
         """
-        Decode a base64 image string and save to a temp file.
-        Returns the temp file path.
+        Decode a base64 image string to a PIL Image.
+        Returns the PIL Image object.
         """
         if data is None:
             return None
@@ -58,16 +56,10 @@ class GeneratorService:
         try:
             img_bytes = base64.b64decode(encoded)
             img = Image.open(io.BytesIO(img_bytes))
-
-            # Save to temp file
-            suffix = ".png"
-            if "jpeg" in data.lower() or "jpg" in data.lower():
-                suffix = ".jpg"
-
-            fd, path = tempfile.mkstemp(suffix=suffix)
-            os.close(fd)
-            img.save(path)
-            return path
+            # Convert to RGB if necessary (e.g., RGBA or palette images)
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            return img
         except Exception as e:
             print(f"Error decoding base64 image: {e}")
             return None
@@ -125,17 +117,15 @@ class GeneratorService:
         # Start with primary settings as defaults
         inputs = self._wgp.primary_settings.copy()
 
-        # Handle base64 images - decode to temp files
-        temp_files = []
+        # Handle base64 images - decode to PIL Image objects
         for img_field in ["image_start", "image_end"]:
             if img_field in params and params[img_field]:
                 img_data = params[img_field]
                 if isinstance(img_data, str) and (img_data.startswith("data:") or len(img_data) > 500):
                     # Looks like base64 data
-                    temp_path = self._decode_base64_image(img_data)
-                    if temp_path:
-                        temp_files.append(temp_path)
-                        params[img_field] = temp_path
+                    pil_image = self._decode_base64_image(img_data)
+                    if pil_image:
+                        params[img_field] = pil_image
 
         # Override with provided params
         inputs.update(params)
@@ -182,13 +172,6 @@ class GeneratorService:
             # Run generation
             self._wgp.generate_video(**filtered_params)
 
-            # Cleanup temp files
-            for temp_file in temp_files:
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
-
             if result_container["error"]:
                 return GenerationResult(
                     success=False,
@@ -215,13 +198,6 @@ class GeneratorService:
             )
 
         except Exception as e:
-            # Cleanup temp files on error
-            for temp_file in temp_files:
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
-
             import traceback
             traceback.print_exc()
             return GenerationResult(
