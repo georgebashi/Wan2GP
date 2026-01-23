@@ -135,7 +135,7 @@ class GeneratorService:
                     temp_path = self._decode_base64_image(img_data)
                     if temp_path:
                         temp_files.append(temp_path)
-                        params[img_field] = [temp_path]  # Wrap in list as expected
+                        params[img_field] = temp_path
 
         # Override with provided params
         inputs.update(params)
