@@ -168,6 +168,13 @@ class GeneratorService:
         if "image_mode" not in filtered_params:
             filtered_params["image_mode"] = 0
 
+        # Handle video_quality parameter by temporarily overriding server_config
+        video_quality = params.get("video_quality")
+        original_codec = None
+        if video_quality:
+            original_codec = self._wgp.server_config.get("video_output_codec")
+            self._wgp.server_config["video_output_codec"] = video_quality
+
         try:
             # Run generation
             self._wgp.generate_video(**filtered_params)
@@ -205,6 +212,10 @@ class GeneratorService:
                 error=str(e),
                 error_type="exception"
             )
+        finally:
+            # Restore original video codec setting
+            if original_codec is not None:
+                self._wgp.server_config["video_output_codec"] = original_codec
 
     def _create_state(self) -> Dict:
         """Create a minimal state dict for generation."""
