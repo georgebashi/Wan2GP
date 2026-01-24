@@ -6,18 +6,35 @@ FastAPI application providing REST endpoints for video generation.
 
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
+_import_start = time.time()
+
+def _log_timing(msg):
+    print(f"[{time.time():.3f}] [+{time.time() - _import_start:.2f}s] {msg}", flush=True)
+
+_log_timing("api.server: Starting imports...")
+
+_t = time.time()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+_log_timing(f"api.server: FastAPI imports done ({time.time() - _t:.2f}s)")
 
 # Ensure parent directory is in path for wgp imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+_t = time.time()
 from api.services.model_manager import model_manager
+_log_timing(f"api.server: model_manager import done ({time.time() - _t:.2f}s)")
+
+_t = time.time()
 from api.services.generator import GeneratorService
+_log_timing(f"api.server: GeneratorService import done ({time.time() - _t:.2f}s)")
+
+_t = time.time()
 from api.schemas.requests import GenerationRequest, LoadModelRequest
 from api.schemas.responses import (
     GenerationResponse,
@@ -26,6 +43,7 @@ from api.schemas.responses import (
     HealthResponse,
     ErrorResponse,
 )
+_log_timing(f"api.server: schemas import done ({time.time() - _t:.2f}s)")
 
 # Version (will be updated from wgp on startup)
 VERSION = "1.0.0"
@@ -37,32 +55,32 @@ generator_service: Optional[GeneratorService] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize services on startup, cleanup on shutdown."""
-    global generator_service, VERSION
+    global generator_service
+
+    _log_timing("lifespan: Starting...")
 
     # Initialize generator service
+    _t = time.time()
     generator_service = GeneratorService(model_manager)
-
-    # Try to get version from wgp
-    try:
-        import wgp
-        VERSION = getattr(wgp, "WanGP_version", "1.0.0")
-    except:
-        pass
+    _log_timing(f"lifespan: GeneratorService created ({time.time() - _t:.2f}s)")
 
     # Preload model if configured
     preload_model = os.getenv("WANGP_PRELOAD_MODEL")
     preload_profile = int(os.getenv("WANGP_PROFILE", "-1"))
 
     if preload_model:
-        print(f"Preloading model: {preload_model}")
+        _log_timing(f"lifespan: Preloading model {preload_model}...")
+        _t = time.time()
         try:
             model_manager.load_model(preload_model, profile=preload_profile)
-            print(f"Model {preload_model} loaded successfully")
+            _log_timing(f"lifespan: Model {preload_model} loaded ({time.time() - _t:.2f}s)")
         except Exception as e:
-            print(f"Failed to preload model: {e}")
+            _log_timing(f"lifespan: Failed to preload model: {e}")
 
+    _log_timing("lifespan: Startup complete, yielding...")
     yield
 
+    _log_timing("lifespan: Shutting down...")
     # Cleanup (optional: unload model to free memory)
     # model_manager.unload_model()
 

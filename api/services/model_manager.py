@@ -33,7 +33,11 @@ class ModelManager:
     def _ensure_wgp_imported(self):
         """Lazy import of wgp module to avoid circular imports."""
         if not self._wgp_imported:
+            import time
+            print(f"[{time.time():.3f}] model_manager: Starting wgp import...", flush=True)
+            _t = time.time()
             import wgp
+            print(f"[{time.time():.3f}] model_manager: wgp imported in {time.time() - _t:.2f}s", flush=True)
             self._wgp = wgp
             self._wgp_imported = True
 
