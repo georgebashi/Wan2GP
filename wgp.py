@@ -64,6 +64,9 @@ if API_ONLY:
         def update(**kwargs): return kwargs
         class Tabs: pass
         class Accordion: pass
+        class EventData: pass
+        class SelectData: pass
+        class LikeData: pass
     gr = _GradioStub()
     AudioGallery = None
     notification_sound = None
