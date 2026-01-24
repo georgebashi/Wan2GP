@@ -218,11 +218,8 @@ async def get_file(filepath: str):
 
     The filepath should be relative to the outputs directory.
     """
-    try:
-        import wgp
-        save_path = wgp.save_path
-    except:
-        save_path = "outputs"
+    import wgp
+    save_path = wgp.save_path
 
     # Handle both absolute and relative paths
     if os.path.isabs(filepath):

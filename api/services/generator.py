@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from PIL import Image
 import io
 
+import wgp
+
 
 @dataclass
 class GenerationResult:
@@ -26,14 +28,6 @@ class GeneratorService:
 
     def __init__(self, model_manager):
         self.model_manager = model_manager
-        self._wgp_imported = False
-
-    def _ensure_wgp_imported(self):
-        """Lazy import of wgp module."""
-        if not self._wgp_imported:
-            import wgp
-            self._wgp = wgp
-            self._wgp_imported = True
 
     def _decode_base64_image(self, data: str) -> Optional[Image.Image]:
         """
@@ -79,8 +73,6 @@ class GeneratorService:
         Returns:
             GenerationResult with output path or error
         """
-        self._ensure_wgp_imported()
-
         # Handle dynamic model definition
         model_def = params.pop("model_def", None)
         model_type = params.get("model_type")
@@ -100,7 +92,7 @@ class GeneratorService:
                     model_def_dict = model_def.model_dump(exclude_none=True)
                 else:
                     model_def_dict = dict(model_def)
-                _, force_reload = self._wgp.register_model_def(model_type, model_def_dict)
+                _, force_reload = wgp.register_model_def(model_type, model_def_dict)
             except Exception as e:
                 return GenerationResult(
                     success=False,
@@ -141,7 +133,7 @@ class GeneratorService:
         state = self._create_state()
 
         # Start with primary settings as defaults
-        inputs = self._wgp.primary_settings.copy()
+        inputs = wgp.primary_settings.copy()
 
         # Handle base64 images - decode to PIL Image objects
         for img_field in ["image_start", "image_end"]:
@@ -167,7 +159,7 @@ class GeneratorService:
         def send_cmd(cmd_type, data=None):
             """Callback to capture progress and results."""
             if cmd_type == "output":
-                gen = self._wgp.get_gen_info(state)
+                gen = wgp.get_gen_info(state)
                 if gen.get("file_list"):
                     result_container["output_path"] = gen["file_list"][-1]
             elif cmd_type == "error":
@@ -176,7 +168,7 @@ class GeneratorService:
                 progress_callback(cmd_type, data)
 
         # Get the valid parameter names for generate_video
-        sig = inspect.signature(self._wgp.generate_video)
+        sig = inspect.signature(wgp.generate_video)
         expected_args = set(sig.parameters.keys())
 
         # Filter inputs to only valid parameters
@@ -198,12 +190,12 @@ class GeneratorService:
         video_quality = params.get("video_quality")
         original_codec = None
         if video_quality:
-            original_codec = self._wgp.server_config.get("video_output_codec")
-            self._wgp.server_config["video_output_codec"] = video_quality
+            original_codec = wgp.server_config.get("video_output_codec")
+            wgp.server_config["video_output_codec"] = video_quality
 
         try:
             # Run generation
-            self._wgp.generate_video(**filtered_params)
+            wgp.generate_video(**filtered_params)
 
             if result_container["error"]:
                 return GenerationResult(
@@ -213,7 +205,7 @@ class GeneratorService:
                 )
 
             # Get output path from state
-            gen = self._wgp.get_gen_info(state)
+            gen = wgp.get_gen_info(state)
             output_path = None
             if gen.get("file_list"):
                 output_path = gen["file_list"][-1]
@@ -241,7 +233,7 @@ class GeneratorService:
         finally:
             # Restore original video codec setting
             if original_codec is not None:
-                self._wgp.server_config["video_output_codec"] = original_codec
+                wgp.server_config["video_output_codec"] = original_codec
 
     def _create_state(self) -> Dict:
         """Create a minimal state dict for generation."""

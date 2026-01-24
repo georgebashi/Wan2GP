@@ -6,7 +6,14 @@ for the HTTP API to load and query models.
 """
 
 import threading
-from typing import Optional, Dict, Any, List
+import time
+from typing import Optional, Dict, List
+
+# Import wgp at module level to ensure compilation happens at startup
+print(f"[{time.time():.3f}] model_manager: Starting wgp import...", flush=True)
+_t = time.time()
+import wgp
+print(f"[{time.time():.3f}] model_manager: wgp imported in {time.time() - _t:.2f}s", flush=True)
 
 
 class ModelManager:
@@ -28,18 +35,6 @@ class ModelManager:
             return
         self._initialized = True
         self.model_lock = threading.Lock()
-        self._wgp_imported = False
-
-    def _ensure_wgp_imported(self):
-        """Lazy import of wgp module to avoid circular imports."""
-        if not self._wgp_imported:
-            import time
-            print(f"[{time.time():.3f}] model_manager: Starting wgp import...", flush=True)
-            _t = time.time()
-            import wgp
-            print(f"[{time.time():.3f}] model_manager: wgp imported in {time.time() - _t:.2f}s", flush=True)
-            self._wgp = wgp
-            self._wgp_imported = True
 
     def load_model(self, model_type: str, profile: int = -1) -> bool:
         """
@@ -53,53 +48,44 @@ class ModelManager:
             True if model loaded successfully
         """
         with self.model_lock:
-            self._ensure_wgp_imported()
-
             current = self.get_current_model_type()
             if current == model_type:
                 return True  # Already loaded
 
             # Unload current model if any
-            if self._wgp.wan_model is not None:
-                self._wgp.release_model()
+            if wgp.wan_model is not None:
+                wgp.release_model()
 
             # Load new model
-            self._wgp.wan_model, self._wgp.offloadobj = self._wgp.load_models(
+            wgp.wan_model, wgp.offloadobj = wgp.load_models(
                 model_type,
                 override_profile=profile
             )
-            self._wgp.reload_needed = False
+            wgp.reload_needed = False
             return True
 
     def get_current_model_type(self) -> Optional[str]:
         """Get the currently loaded model type."""
-        # Don't trigger heavy wgp import just for health checks
-        if not self._wgp_imported:
+        if wgp.wan_model is None:
             return None
-        if self._wgp.wan_model is None:
-            return None
-        return self._wgp.transformer_type
+        return wgp.transformer_type
 
     def get_model(self):
         """Get the currently loaded model and offload object."""
-        self._ensure_wgp_imported()
-        return self._wgp.wan_model, self._wgp.offloadobj
+        return wgp.wan_model, wgp.offloadobj
 
     def is_loaded(self, model_type: str = None) -> bool:
         """Check if a model is loaded (optionally check specific type)."""
-        self._ensure_wgp_imported()
-        if self._wgp.wan_model is None:
+        if wgp.wan_model is None:
             return False
         if model_type:
-            return self._wgp.transformer_type == model_type
+            return wgp.transformer_type == model_type
         return True
 
     def get_available_models(self) -> Dict[str, List[str]]:
         """Get all available model types grouped by family."""
-        self._ensure_wgp_imported()
-
         families = {}
-        for base_type, handler in self._wgp.model_types_handlers.items():
+        for base_type, handler in wgp.model_types_handlers.items():
             family = handler.query_model_family()
             if family not in families:
                 families[family] = []
