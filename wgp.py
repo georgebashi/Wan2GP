@@ -2297,14 +2297,22 @@ def register_model_def(model_type, model_def, settings=None):
         settings: Optional dict of default generation settings
 
     Returns:
-        The initialized model definition
+        The initialized model definition, and True if the model was unloaded
+        (indicating a reload is needed)
     """
+    global wan_model
+    reload_needed = False
+
     # Check if already registered with same definition
     existing = models_def.get(model_type)
     if existing is not None:
         # Check if it's the same model (compare URLs)
         if existing.get("URLs") == model_def.get("URLs"):
-            return existing
+            return existing, False
+        # Different URLs - need to unload the model if it's currently loaded
+        if transformer_type == model_type and wan_model is not None:
+            release_model()
+            reload_needed = True
 
     # Initialize the model definition (fills in defaults from handler)
     # Must store partial def first so get_base_model_type() can find it
@@ -2318,7 +2326,7 @@ def register_model_def(model_type, model_def, settings=None):
     if settings:
         initialized_def["settings"] = settings
 
-    return initialized_def
+    return initialized_def, reload_needed
 
 
 

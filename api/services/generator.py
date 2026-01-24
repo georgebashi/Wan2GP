@@ -85,6 +85,7 @@ class GeneratorService:
         model_def = params.pop("model_def", None)
         model_type = params.get("model_type")
 
+        force_reload = False
         if model_def:
             # Register the model definition dynamically
             if not model_type:
@@ -99,7 +100,7 @@ class GeneratorService:
                     model_def_dict = model_def.model_dump(exclude_none=True)
                 else:
                     model_def_dict = dict(model_def)
-                self._wgp.register_model_def(model_type, model_def_dict)
+                _, force_reload = self._wgp.register_model_def(model_type, model_def_dict)
             except Exception as e:
                 return GenerationResult(
                     success=False,
@@ -109,7 +110,7 @@ class GeneratorService:
 
         # Ensure model is loaded
         if model_type:
-            if not self.model_manager.is_loaded(model_type):
+            if force_reload or not self.model_manager.is_loaded(model_type):
                 try:
                     self.model_manager.load_model(model_type)
                 except Exception as e:
