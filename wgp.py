@@ -52,7 +52,7 @@ from shared.utils import files_locator as fl
 
 # Conditionally import heavy UI dependencies
 if API_ONLY:
-    # Stub out gradio - provide no-op functions for gr.Info, gr.Warning, gr.Error
+    # Stub out gradio - provide no-op functions and placeholder classes
     class _GradioStub:
         @staticmethod
         def Info(msg): print(f"[INFO] {msg}")
@@ -62,11 +62,44 @@ if API_ONLY:
         def Error(msg): raise Exception(msg)
         @staticmethod
         def update(**kwargs): return kwargs
+        # UI component stubs (used in type hints and default args)
         class Tabs: pass
+        class Tab: pass
         class Accordion: pass
+        class Row: pass
+        class Column: pass
+        class Group: pass
+        class Blocks: pass
+        class Button: pass
+        class Slider: pass
+        class Dropdown: pass
+        class Textbox: pass
+        class Text: pass
+        class Checkbox: pass
+        class Radio: pass
+        class Number: pass
+        class Markdown: pass
+        class HTML: pass
+        class Image: pass
+        class ImageEditor: pass
+        class Video: pass
+        class Audio: pass
+        class File: pass
+        class Files: pass
+        class Gallery: pass
+        class State: pass
+        class UploadButton: pass
+        class DownloadButton: pass
+        class Brush: pass
+        # Event data stubs
         class EventData: pass
         class SelectData: pass
         class LikeData: pass
+        # Progress stub - needs to be callable and return something iterable
+        class Progress:
+            def __init__(self, *args, **kwargs): pass
+            def __call__(self, iterable, *args, **kwargs): return iterable
+            def tqdm(self, iterable, *args, **kwargs): return iterable
     gr = _GradioStub()
     AudioGallery = None
     notification_sound = None
