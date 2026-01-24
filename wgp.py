@@ -2307,12 +2307,12 @@ def register_model_def(model_type, model_def, settings=None):
             return existing
 
     # Initialize the model definition (fills in defaults from handler)
+    # Must store partial def first so get_base_model_type() can find it
     model_def = model_def.copy()  # Don't mutate input
     model_def["path"] = f"<dynamic:{model_type}>"
+    models_def[model_type] = model_def  # Store partial def first
     initialized_def = init_model_def(model_type, model_def)
-
-    # Store in models_def
-    models_def[model_type] = initialized_def
+    models_def[model_type] = initialized_def  # Replace with full def
 
     # Add settings if provided
     if settings:
