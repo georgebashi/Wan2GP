@@ -50,20 +50,28 @@ import json
 import numpy as np
 import importlib
 _t = _time.time()
+_t0 = _t
 from shared.utils.loras_mutipliers import preparse_loras_multipliers, parse_loras_multipliers
+_log_timing(f"  loras_mutipliers ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.utils.utils import convert_tensor_to_image, save_image, get_video_info, get_file_creation_date, convert_image_to_video, calculate_new_dimensions, convert_image_to_tensor, calculate_dimensions_and_resize_image, rescale_and_crop, get_video_frame, resize_and_remove_background, rgb_bw_to_rgba_mask, to_rgb_tensor
+_log_timing(f"  utils (1) ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.utils.utils import calculate_new_dimensions, get_outpainting_frame_location, get_outpainting_full_area_dimensions
 from shared.utils.utils import has_video_file_extension, has_image_file_extension, has_audio_file_extension
 from shared.utils.audio_video import extract_audio_tracks, combine_video_with_audio_tracks, combine_and_concatenate_video_with_audio_tracks, cleanup_temp_audio_files,  save_video, save_image
 from shared.utils.audio_video import save_image_metadata, read_image_metadata
 from shared.utils.audio_metadata import save_audio_metadata, read_audio_metadata
 from shared.utils.video_metadata import save_video_metadata
+_log_timing(f"  audio/video ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.match_archi import match_nvidia_architecture
+_log_timing(f"  match_archi ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.attention import get_attention_modes, get_supported_attention_modes
+_log_timing(f"  attention ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.utils.utils import truncate_for_filesystem, sanitize_file_name, process_images_multithread, get_default_workers
 from shared.utils.process_locks import acquire_GPU_ressources, release_GPU_ressources, any_GPU_process_running, gen_lock
+_log_timing(f"  process_locks ({_time.time()-_t:.2f}s)"); _t = _time.time()
 from shared.loras_migration import migrate_loras_layout
-_log_timing(f"shared.utils imports ({_time.time()-_t:.2f}s)")
+_log_timing(f"  loras_migration ({_time.time()-_t:.2f}s)")
+_log_timing(f"shared.utils imports total ({_time.time()-_t0:.2f}s)")
 _t = _time.time()
 from huggingface_hub import hf_hub_download, snapshot_download
 _log_timing(f"huggingface_hub import ({_time.time()-_t:.2f}s)")
