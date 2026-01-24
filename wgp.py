@@ -1,12 +1,23 @@
 import os, sys
+import time as _time
 
 # API-only mode skips heavy UI imports (gradio, etc.) for faster startup
 API_ONLY = os.environ.get("WANGP_API_ONLY", "0") == "1"
 
+# Timing instrumentation for cold start analysis
+_wgp_import_start = _time.time()
+def _log_timing(msg):
+    elapsed = _time.time() - _wgp_import_start
+    print(f"[wgp +{elapsed:6.2f}s] {msg}", flush=True)
+
+_log_timing("Starting wgp.py module load...")
+
 os.environ["GRADIO_LANG"] = "en"
 # # os.environ.pop("TORCH_LOGS", None)  # make sure no env var is suppressing/overriding
 # os.environ["TORCH_LOGS"]= "recompiles"
+_t = _time.time()
 import torch._logging as tlog
+_log_timing(f"torch._logging import ({_time.time()-_t:.2f}s)")
 # tlog.set_logs(recompiles=True, guards=True, graph_breaks=True)    
 p = os.path.dirname(os.path.abspath(__file__))
 if p not in sys.path:
@@ -23,9 +34,13 @@ import threading
 import argparse
 import warnings
 warnings.filterwarnings('ignore', message='Failed to find.*', module='triton')
+_t = _time.time()
 from mmgp import offload, safetensors2, profile_type , quant_router
+_log_timing(f"mmgp import ({_time.time()-_t:.2f}s)")
 try:
+    _t = _time.time()
     import triton
+    _log_timing(f"triton import ({_time.time()-_t:.2f}s)")
 except ImportError:
     pass
 from pathlib import Path
@@ -34,6 +49,7 @@ import random
 import json
 import numpy as np
 import importlib
+_t = _time.time()
 from shared.utils.loras_mutipliers import preparse_loras_multipliers, parse_loras_multipliers
 from shared.utils.utils import convert_tensor_to_image, save_image, get_video_info, get_file_creation_date, convert_image_to_video, calculate_new_dimensions, convert_image_to_tensor, calculate_dimensions_and_resize_image, rescale_and_crop, get_video_frame, resize_and_remove_background, rgb_bw_to_rgba_mask, to_rgb_tensor
 from shared.utils.utils import calculate_new_dimensions, get_outpainting_frame_location, get_outpainting_full_area_dimensions
@@ -47,7 +63,10 @@ from shared.attention import get_attention_modes, get_supported_attention_modes
 from shared.utils.utils import truncate_for_filesystem, sanitize_file_name, process_images_multithread, get_default_workers
 from shared.utils.process_locks import acquire_GPU_ressources, release_GPU_ressources, any_GPU_process_running, gen_lock
 from shared.loras_migration import migrate_loras_layout
+_log_timing(f"shared.utils imports ({_time.time()-_t:.2f}s)")
+_t = _time.time()
 from huggingface_hub import hf_hub_download, snapshot_download
+_log_timing(f"huggingface_hub import ({_time.time()-_t:.2f}s)")
 from shared.utils import files_locator as fl
 
 # Conditionally import heavy UI dependencies
@@ -104,11 +123,15 @@ if API_ONLY:
     AudioGallery = None
     notification_sound = None
 else:
+    _t = _time.time()
     import gradio as gr
     from shared.gradio.audio_gallery import AudioGallery
     from shared.utils import notification_sound
+    _log_timing(f"gradio imports ({_time.time()-_t:.2f}s)")
 
+_t = _time.time()
 import torch
+_log_timing(f"torch import ({_time.time()-_t:.2f}s)")
 import gc
 import traceback
 import math 
@@ -125,11 +148,15 @@ import shutil
 import glob
 import cv2
 import html
+_t = _time.time()
 from transformers.utils import logging
+_log_timing(f"transformers.utils.logging import ({_time.time()-_t:.2f}s)")
 logging.set_verbosity_error
 from tqdm import tqdm
 import requests
+_t = _time.time()
 from shared.ffmpeg_setup import download_ffmpeg
+_log_timing(f"ffmpeg_setup import ({_time.time()-_t:.2f}s)")
 from collections import defaultdict
 
 # More conditional UI imports
@@ -137,8 +164,12 @@ if API_ONLY:
     AdvancedMediaGallery = None
     PluginManager = WAN2GPApplication = SYSTEM_PLUGINS = None
 else:
+    _t = _time.time()
     from shared.gradio.gallery import AdvancedMediaGallery
     from shared.utils.plugins import PluginManager, WAN2GPApplication, SYSTEM_PLUGINS
+    _log_timing(f"gradio gallery/plugins imports ({_time.time()-_t:.2f}s)")
+
+_log_timing("Imports complete, starting module-level initialization...")
 
 # import torch._dynamo as dynamo
 # dynamo.config.recompile_limit = 2000   # default is 256
@@ -2099,12 +2130,22 @@ def get_lora_dir(model_type):
         os.makedirs(lora_dir, exist_ok=True)
     return lora_dir
 
+_t = _time.time()
 attention_modes_installed = get_attention_modes()
 attention_modes_supported = get_supported_attention_modes()
-args = _parse_args()
-migrate_loras_layout()
+_log_timing(f"get_attention_modes ({_time.time()-_t:.2f}s)")
 
+_t = _time.time()
+args = _parse_args()
+_log_timing(f"_parse_args ({_time.time()-_t:.2f}s)")
+
+_t = _time.time()
+migrate_loras_layout()
+_log_timing(f"migrate_loras_layout ({_time.time()-_t:.2f}s)")
+
+_t = _time.time()
 gpu_major, gpu_minor = torch.cuda.get_device_capability(args.gpu if len(args.gpu) > 0 else None)
+_log_timing(f"torch.cuda.get_device_capability ({_time.time()-_t:.2f}s)")
 if  gpu_major < 8:
     print("Switching to FP16 models when possible as GPU architecture doesn't support optimed BF16 Kernels")
     bfloat16_supported = False
@@ -2283,7 +2324,9 @@ model_signatures = {"t2v": "text2video_14B", "t2v_1.3B" : "text2video_1.3B",   "
 def map_family_handlers(family_handlers):
     base_types_handlers, families_infos, models_eqv_map, models_comp_map = {}, {"unknown": (100, "Unknown")}, {}, {}
     for path in family_handlers:
+        _t = _time.time()
         handler = importlib.import_module(path).family_handler
+        _log_timing(f"  import {path} ({_time.time()-_t:.2f}s)")
         for model_type in handler.query_supported_types():
             if model_type in base_types_handlers:
                 prev = base_types_handlers[model_type].__name__
@@ -2297,7 +2340,10 @@ def map_family_handlers(family_handlers):
 # models_eqv_map: bidirectional compatibility between base model types
 # models_comp_map : mono directional compatibility between base model types {"A" : {"B", "C"} } means B & C model types can accept A  model types (but not the other way). Said otherwise B & C are derived data types
 
+_t = _time.time()
+_log_timing("Starting map_family_handlers...")
 model_types_handlers, families_infos,  models_eqv_map, models_comp_map = map_family_handlers(family_handlers)
+_log_timing(f"map_family_handlers complete ({_time.time()-_t:.2f}s)")
 
 def get_base_model_type(model_type):
     model_def = get_model_def(model_type)
@@ -2754,8 +2800,10 @@ def init_model_def(model_type, model_def):
     return default_model_def
 
 
-models_def_paths =  glob.glob( os.path.join("defaults", "*.json") ) + glob.glob( os.path.join("finetunes", "*.json") ) 
+_t = _time.time()
+models_def_paths =  glob.glob( os.path.join("defaults", "*.json") ) + glob.glob( os.path.join("finetunes", "*.json") )
 models_def_paths.sort()
+_log_timing(f"Loading {len(models_def_paths)} model definition files...")
 for file_path in models_def_paths:
     model_type = os.path.basename(file_path)[:-5]
     with open(file_path, "r", encoding="utf-8") as f:
@@ -2779,11 +2827,13 @@ for file_path in models_def_paths:
         models_def[model_type] = model_def # replace with full def
         model_def["settings"] = settings
 
+_log_timing(f"Model definitions loaded ({_time.time()-_t:.2f}s)")
+
 model_types = models_def.keys()
 displayed_model_types= []
 for model_type in model_types:
     model_def = get_model_def(model_type)
-    if not model_def is None and model_def.get("visible", True): 
+    if not model_def is None and model_def.get("visible", True):
         displayed_model_types.append(model_type)
 
 
@@ -11031,6 +11081,8 @@ def create_ui():
         if stats_app is not None:
             stats_app.setup_events(main, state)
         return main
+
+_log_timing(f"wgp.py module load complete (total: {_time.time()-_wgp_import_start:.2f}s)")
 
 if __name__ == "__main__":
     app = WAN2GPApplication()
