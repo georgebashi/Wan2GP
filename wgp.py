@@ -1,4 +1,8 @@
 import os, sys
+
+# API-only mode skips heavy UI imports (gradio, etc.) for faster startup
+API_ONLY = os.environ.get("WANGP_API_ONLY", "0") == "1"
+
 os.environ["GRADIO_LANG"] = "en"
 # # os.environ.pop("TORCH_LOGS", None)  # make sure no env var is suppressing/overriding
 # os.environ["TORCH_LOGS"]= "recompiles"
@@ -26,12 +30,10 @@ except ImportError:
     pass
 from pathlib import Path
 from datetime import datetime
-import gradio as gr
 import random
 import json
 import numpy as np
 import importlib
-from shared.utils import notification_sound
 from shared.utils.loras_mutipliers import preparse_loras_multipliers, parse_loras_multipliers
 from shared.utils.utils import convert_tensor_to_image, save_image, get_video_info, get_file_creation_date, convert_image_to_video, calculate_new_dimensions, convert_image_to_tensor, calculate_dimensions_and_resize_image, rescale_and_crop, get_video_frame, resize_and_remove_background, rgb_bw_to_rgba_mask, to_rgb_tensor
 from shared.utils.utils import calculate_new_dimensions, get_outpainting_frame_location, get_outpainting_full_area_dimensions
@@ -46,8 +48,30 @@ from shared.utils.utils import truncate_for_filesystem, sanitize_file_name, proc
 from shared.utils.process_locks import acquire_GPU_ressources, release_GPU_ressources, any_GPU_process_running, gen_lock
 from shared.loras_migration import migrate_loras_layout
 from huggingface_hub import hf_hub_download, snapshot_download
-from shared.utils import files_locator as fl 
-from shared.gradio.audio_gallery import AudioGallery  
+from shared.utils import files_locator as fl
+
+# Conditionally import heavy UI dependencies
+if API_ONLY:
+    # Stub out gradio - provide no-op functions for gr.Info, gr.Warning, gr.Error
+    class _GradioStub:
+        @staticmethod
+        def Info(msg): print(f"[INFO] {msg}")
+        @staticmethod
+        def Warning(msg): print(f"[WARNING] {msg}")
+        @staticmethod
+        def Error(msg): raise Exception(msg)
+        @staticmethod
+        def update(**kwargs): return kwargs
+        class Tabs: pass
+        class Accordion: pass
+    gr = _GradioStub()
+    AudioGallery = None
+    notification_sound = None
+else:
+    import gradio as gr
+    from shared.gradio.audio_gallery import AudioGallery
+    from shared.utils import notification_sound
+
 import torch
 import gc
 import traceback
@@ -69,10 +93,16 @@ from transformers.utils import logging
 logging.set_verbosity_error
 from tqdm import tqdm
 import requests
-from shared.gradio.gallery import AdvancedMediaGallery
 from shared.ffmpeg_setup import download_ffmpeg
-from shared.utils.plugins import PluginManager, WAN2GPApplication, SYSTEM_PLUGINS
 from collections import defaultdict
+
+# More conditional UI imports
+if API_ONLY:
+    AdvancedMediaGallery = None
+    PluginManager = WAN2GPApplication = SYSTEM_PLUGINS = None
+else:
+    from shared.gradio.gallery import AdvancedMediaGallery
+    from shared.utils.plugins import PluginManager, WAN2GPApplication, SYSTEM_PLUGINS
 
 # import torch._dynamo as dynamo
 # dynamo.config.recompile_limit = 2000   # default is 256

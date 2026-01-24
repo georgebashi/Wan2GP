@@ -73,7 +73,9 @@ class ModelManager:
 
     def get_current_model_type(self) -> Optional[str]:
         """Get the currently loaded model type."""
-        self._ensure_wgp_imported()
+        # Don't trigger heavy wgp import just for health checks
+        if not self._wgp_imported:
+            return None
         if self._wgp.wan_model is None:
             return None
         return self._wgp.transformer_type
