@@ -2277,6 +2277,50 @@ def get_model_def(model_type):
     return models_def.get(model_type, None )
 
 
+def register_model_def(model_type, model_def, settings=None):
+    """
+    Register a model definition dynamically at runtime.
+
+    This allows API clients to pass model definitions without needing
+    finetune JSON files on disk.
+
+    Args:
+        model_type: Unique identifier for this model (e.g., "nsfw_fastmove")
+        model_def: Dict with model definition containing:
+            - architecture: Base model type (e.g., "i2v_2_2")
+            - URLs: List of model file paths
+            - URLs2: Optional secondary model files
+            - text_encoder_URLs: Text encoder file paths
+            - VAE_URLs: VAE file paths
+            - name: Human-readable model name
+            - group: Model family group
+        settings: Optional dict of default generation settings
+
+    Returns:
+        The initialized model definition
+    """
+    # Check if already registered with same definition
+    existing = models_def.get(model_type)
+    if existing is not None:
+        # Check if it's the same model (compare URLs)
+        if existing.get("URLs") == model_def.get("URLs"):
+            return existing
+
+    # Initialize the model definition (fills in defaults from handler)
+    model_def = model_def.copy()  # Don't mutate input
+    model_def["path"] = f"<dynamic:{model_type}>"
+    initialized_def = init_model_def(model_type, model_def)
+
+    # Store in models_def
+    models_def[model_type] = initialized_def
+
+    # Add settings if provided
+    if settings:
+        initialized_def["settings"] = settings
+
+    return initialized_def
+
+
 
 def get_model_type(model_filename):
     for model_type, signature in model_signatures.items():

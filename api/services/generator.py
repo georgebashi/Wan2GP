@@ -81,8 +81,33 @@ class GeneratorService:
         """
         self._ensure_wgp_imported()
 
-        # Ensure model is loaded
+        # Handle dynamic model definition
+        model_def = params.pop("model_def", None)
         model_type = params.get("model_type")
+
+        if model_def:
+            # Register the model definition dynamically
+            if not model_type:
+                return GenerationResult(
+                    success=False,
+                    error="model_type is required when using model_def",
+                    error_type="validation_error"
+                )
+            try:
+                # Convert pydantic model to dict if needed
+                if hasattr(model_def, "model_dump"):
+                    model_def_dict = model_def.model_dump(exclude_none=True)
+                else:
+                    model_def_dict = dict(model_def)
+                self._wgp.register_model_def(model_type, model_def_dict)
+            except Exception as e:
+                return GenerationResult(
+                    success=False,
+                    error=f"Failed to register model definition: {e}",
+                    error_type="model_registration_error"
+                )
+
+        # Ensure model is loaded
         if model_type:
             if not self.model_manager.is_loaded(model_type):
                 try:

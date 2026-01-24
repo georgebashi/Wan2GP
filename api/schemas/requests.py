@@ -3,7 +3,21 @@ Request schemas for the WanGP HTTP API.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+
+
+class ModelDefinition(BaseModel):
+    """Dynamic model definition for runtime registration."""
+    architecture: str = Field(..., description="Base model type (e.g., 'i2v_2_2', 't2v')")
+    URLs: List[str] = Field(..., description="Primary model file paths")
+    URLs2: Optional[List[str]] = Field(None, description="Secondary model files (e.g., for quality switching)")
+    text_encoder_URLs: Optional[List[str]] = Field(None, description="Text encoder file paths")
+    VAE_URLs: Optional[List[str]] = Field(None, description="VAE file paths")
+    name: Optional[str] = Field(None, description="Human-readable model name")
+    group: Optional[str] = Field(None, description="Model family group")
+
+    class Config:
+        extra = "allow"  # Allow additional fields for model-specific options
 
 
 class LoraConfig(BaseModel):
@@ -26,6 +40,7 @@ class GenerationRequest(BaseModel):
 
     # Model selection (optional if model already loaded)
     model_type: Optional[str] = Field(None, description="Model type to use")
+    model_def: Optional[ModelDefinition] = Field(None, description="Dynamic model definition (registers model at runtime)")
 
     # Core generation parameters
     resolution: str = Field("832x480", description="Output resolution (e.g., '1024x576')")
