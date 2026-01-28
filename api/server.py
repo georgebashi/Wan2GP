@@ -45,6 +45,8 @@ from api.schemas.responses import (
 )
 _log_timing(f"api.server: schemas import done ({time.time() - _t:.2f}s)")
 
+from api.profiling import ProfileManager
+
 # Version (will be updated from wgp on startup)
 VERSION = "1.0.0"
 
@@ -63,6 +65,10 @@ async def lifespan(app: FastAPI):
     _t = time.time()
     generator_service = GeneratorService(model_manager)
     _log_timing(f"lifespan: GeneratorService created ({time.time() - _t:.2f}s)")
+
+    # Stop startup profile (server is now ready to accept connections)
+    profile_manager = ProfileManager.get_instance()
+    profile_manager.stop_startup_profile()
 
     # Preload model if configured
     preload_model = os.getenv("WANGP_PRELOAD_MODEL")
