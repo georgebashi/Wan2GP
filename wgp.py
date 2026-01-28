@@ -3133,36 +3133,39 @@ def download_models(model_filename = None, model_type= None, file_type = 0, subm
 
 
     if file_type == 0:
-        shared_def = {
-            "repoId" : "DeepBeepMeep/Wan2.1",
-            "sourceFolderList" : [ "pose", "scribble", "flow", "depth", "mask", "wav2vec", "chinese-wav2vec2-base", "roformer", "pyannote", "det_align", "" ],
-            "fileList" : [ ["dw-ll_ucoco_384.onnx", "yolox_l.onnx"],["netG_A_latest.pth"],  ["raft-things.pth"], 
-                        ["depth_anything_v2_vitl.pth","depth_anything_v2_vitb.pth"], ["sam_vit_h_4b8939_fp16.safetensors", "model.safetensors", "config.json"], 
-                        ["config.json", "feature_extractor_config.json", "model.safetensors", "preprocessor_config.json", "special_tokens_map.json", "tokenizer_config.json", "vocab.json"],
-                        ["config.json", "pytorch_model.bin", "preprocessor_config.json"],
-                        ["model_bs_roformer_ep_317_sdr_12.9755.ckpt", "model_bs_roformer_ep_317_sdr_12.9755.yaml", "download_checks.json"],
-                        ["pyannote_model_wespeaker-voxceleb-resnet34-LM.bin", "pytorch_model_segmentation-3.0.bin"], ["detface.pt"], [ "flownet.pkl" ] ]
-        }
-        process_files_def(**shared_def)
-
-
-        if server_config.get("enhancer_enabled", 0) == 1:
-            enhancer_def = {
-                "repoId" : "DeepBeepMeep/LTX_Video",
-                "sourceFolderList" : [ "Florence2", "Llama3_2"  ],
-                "fileList" : [ ["config.json", "configuration_florence2.py", "model.safetensors", "modeling_florence2.py", "preprocessor_config.json", "processing_florence2.py", "tokenizer.json", "tokenizer_config.json"],["config.json", "generation_config.json", "Llama3_2_quanto_bf16_int8.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]  ]
+        # Skip eager downloads of shared preprocessing files (pose, depth, etc.)
+        # They will be downloaded lazily when the features that need them are used
+        if server_config.get("eager_shared_downloads", True):
+            shared_def = {
+                "repoId" : "DeepBeepMeep/Wan2.1",
+                "sourceFolderList" : [ "pose", "scribble", "flow", "depth", "mask", "wav2vec", "chinese-wav2vec2-base", "roformer", "pyannote", "det_align", "" ],
+                "fileList" : [ ["dw-ll_ucoco_384.onnx", "yolox_l.onnx"],["netG_A_latest.pth"],  ["raft-things.pth"],
+                            ["depth_anything_v2_vitl.pth","depth_anything_v2_vitb.pth"], ["sam_vit_h_4b8939_fp16.safetensors", "model.safetensors", "config.json"],
+                            ["config.json", "feature_extractor_config.json", "model.safetensors", "preprocessor_config.json", "special_tokens_map.json", "tokenizer_config.json", "vocab.json"],
+                            ["config.json", "pytorch_model.bin", "preprocessor_config.json"],
+                            ["model_bs_roformer_ep_317_sdr_12.9755.ckpt", "model_bs_roformer_ep_317_sdr_12.9755.yaml", "download_checks.json"],
+                            ["pyannote_model_wespeaker-voxceleb-resnet34-LM.bin", "pytorch_model_segmentation-3.0.bin"], ["detface.pt"], [ "flownet.pkl" ] ]
             }
-            process_files_def(**enhancer_def)
+            process_files_def(**shared_def)
 
-        elif server_config.get("enhancer_enabled", 0) == 2:
-            enhancer_def = {
-                "repoId" : "DeepBeepMeep/LTX_Video",
-                "sourceFolderList" : [ "Florence2", "llama-joycaption-beta-one-hf-llava"  ],
-                "fileList" : [ ["config.json", "configuration_florence2.py", "model.safetensors", "modeling_florence2.py", "preprocessor_config.json", "processing_florence2.py", "tokenizer.json", "tokenizer_config.json"],["config.json", "llama_joycaption_quanto_bf16_int8.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]  ]
-            }
-            process_files_def(**enhancer_def)
+        if server_config.get("eager_shared_downloads", True):
+            if server_config.get("enhancer_enabled", 0) == 1:
+                enhancer_def = {
+                    "repoId" : "DeepBeepMeep/LTX_Video",
+                    "sourceFolderList" : [ "Florence2", "Llama3_2"  ],
+                    "fileList" : [ ["config.json", "configuration_florence2.py", "model.safetensors", "modeling_florence2.py", "preprocessor_config.json", "processing_florence2.py", "tokenizer.json", "tokenizer_config.json"],["config.json", "generation_config.json", "Llama3_2_quanto_bf16_int8.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]  ]
+                }
+                process_files_def(**enhancer_def)
 
-        download_mmaudio()
+            elif server_config.get("enhancer_enabled", 0) == 2:
+                enhancer_def = {
+                    "repoId" : "DeepBeepMeep/LTX_Video",
+                    "sourceFolderList" : [ "Florence2", "llama-joycaption-beta-one-hf-llava"  ],
+                    "fileList" : [ ["config.json", "configuration_florence2.py", "model.safetensors", "modeling_florence2.py", "preprocessor_config.json", "processing_florence2.py", "tokenizer.json", "tokenizer_config.json"],["config.json", "llama_joycaption_quanto_bf16_int8.safetensors", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"]  ]
+                }
+                process_files_def(**enhancer_def)
+
+            download_mmaudio()
         global download_shared_done
         download_shared_done = True
 
