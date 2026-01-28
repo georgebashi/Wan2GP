@@ -12,3 +12,6 @@ pydantic>=2.0.0
 
 # Multipart form handling (for file uploads)
 python-multipart>=0.0.6
+
+# Profiling
+pyinstrument>=4.6.0
