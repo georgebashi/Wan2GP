@@ -36,6 +36,19 @@ API Endpoints:
 
 import os
 import sys
+
+# Print RUNPOD environment variables for container ID discovery
+print("=== RUNPOD Environment Variables ===", flush=True)
+for key, value in sorted(os.environ.items()):
+    if key.startswith("RUNPOD"):
+        print(f"  {key}={value}", flush=True)
+print("=====================================", flush=True)
+
+# Initialize profiling before any heavy imports
+from api.profiling import ProfileManager
+_profile_manager = ProfileManager.get_instance()
+_profile_manager.start_startup_profile()
+
 import argparse
 
 
