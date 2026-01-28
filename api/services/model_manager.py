@@ -8,6 +8,7 @@ for the HTTP API to load and query models.
 import threading
 import time
 from typing import Optional, Dict, List
+from api.profiling import ProfileManager
 
 # Import wgp at module level to ensure compilation happens at startup
 print(f"[{time.time():.3f}] model_manager: Starting wgp import...", flush=True)
@@ -36,7 +37,7 @@ class ModelManager:
         self._initialized = True
         self.model_lock = threading.Lock()
 
-    def load_model(self, model_type: str, profile: int = -1) -> bool:
+    def load_model(self, model_type: str, profile: int = -1, job_id: str = None) -> bool:
         """
         Load a model, replacing any currently loaded model.
 
@@ -56,12 +57,22 @@ class ModelManager:
             if wgp.wan_model is not None:
                 wgp.release_model()
 
+            # Start model-load profile if job_id provided
+            profile_mgr = ProfileManager.get_instance()
+            if job_id:
+                profile_mgr.start("model-load", job_id)
+
             # Load new model
             wgp.wan_model, wgp.offloadobj = wgp.load_models(
                 model_type,
                 override_profile=profile
             )
             wgp.reload_needed = False
+
+            # Stop model-load profile
+            if job_id:
+                profile_mgr.stop()
+
             return True
 
     def get_current_model_type(self) -> Optional[str]:
