@@ -2919,7 +2919,7 @@ lora_preselected_preset = args.lora_preset
 lora_preset_model = transformer_type
 
 if  args.compile: #args.fastest or
-    compile=["transformer","vae"]
+    compile="transformer"
     lock_ui_compile = True
 
 
