@@ -41,6 +41,7 @@ class GenerationRequest(BaseModel):
     # Model selection (optional if model already loaded)
     model_type: Optional[str] = Field(None, description="Model type to use")
     model_def: Optional[ModelDefinition] = Field(None, description="Dynamic model definition (registers model at runtime)")
+    job_id: Optional[str] = Field(None, description="Job ID for profiling correlation")
 
     # Core generation parameters
     resolution: str = Field("832x480", description="Output resolution (e.g., '1024x576')")
