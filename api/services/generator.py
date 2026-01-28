@@ -7,6 +7,7 @@ import inspect
 import base64
 from typing import Dict, Any, Callable, Optional
 from dataclasses import dataclass, field
+from api.profiling import ProfileManager
 from PIL import Image
 import io
 
@@ -194,9 +195,18 @@ class GeneratorService:
             original_codec = wgp.server_config.get("video_output_codec")
             wgp.server_config["video_output_codec"] = video_quality
 
+        # Start inference profile
+        profile_mgr = ProfileManager.get_instance()
+        if job_id:
+            profile_mgr.start("inference", job_id)
+
         try:
             # Run generation
             wgp.generate_video(**filtered_params)
+
+            # Stop inference profile
+            if job_id:
+                profile_mgr.stop()
 
             if result_container["error"]:
                 return GenerationResult(
@@ -226,6 +236,12 @@ class GeneratorService:
         except Exception as e:
             import traceback
             traceback.print_exc()
+            # Stop inference profile on error
+            if job_id:
+                try:
+                    profile_mgr.stop()
+                except:
+                    pass  # Don't mask original error
             return GenerationResult(
                 success=False,
                 error=str(e),
