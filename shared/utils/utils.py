@@ -10,7 +10,6 @@ import torch
 import decord
 from PIL import Image
 import numpy as np
-from rembg import remove, new_session
 import random
 import ffmpeg
 import os
@@ -19,7 +18,14 @@ import subprocess
 import json
 import time
 from functools import lru_cache
-os.environ["U2NET_HOME"] = os.path.join(os.getcwd(), "ckpts", "rembg")
+
+def _get_rembg():
+    """Lazy-load rembg to avoid expensive import at startup."""
+    import rembg
+    # Set U2NET_HOME before first use
+    if "U2NET_HOME" not in os.environ:
+        os.environ["U2NET_HOME"] = os.path.join(os.getcwd(), "ckpts", "rembg")
+    return rembg
 
 
 from PIL import Image
@@ -248,10 +254,11 @@ def resize_lanczos(img, h, w, method = None):
     return img
 
 def remove_background(img, session=None):
-    if session ==None:
-        session = new_session() 
+    rembg = _get_rembg()
+    if session == None:
+        session = rembg.new_session()
     img = Image.fromarray(np.clip(255. * img.movedim(0, -1).cpu().numpy(), 0, 255).astype(np.uint8))
-    img = remove(img, session=session, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
+    img = rembg.remove(img, session=session, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
     return torch.from_numpy(np.array(img).astype(np.float32) / 255.0).movedim(-1, 0)
 
 
@@ -347,8 +354,10 @@ def calculate_dimensions_and_resize_image(image, canvas_height, canvas_width, fi
     return image, new_height, new_width
 
 def resize_and_remove_background(img_list, budget_width, budget_height, rm_background, any_background_ref, fit_into_canvas = 0, block_size= 16, outpainting_dims = None, background_ref_outpainted = True, inpaint_color = 127.5, return_tensor = False, ignore_last_refs = 0, background_removal_color =  [255, 255, 255] ):
+    rembg = None
     if rm_background:
-        session = new_session() 
+        rembg = _get_rembg()
+        session = rembg.new_session() 
 
     output_list =[]
     output_mask_list =[]
@@ -378,8 +387,8 @@ def resize_and_remove_background(img_list, budget_width, budget_height, rm_backg
             new_width = int( round(width * scale / block_size) * block_size)
             resized_image= img.resize((new_width,new_height), resample=Image.Resampling.LANCZOS) 
         if rm_background  and not (any_background_ref and i==0 or any_background_ref == 2) :
-            # resized_image = remove(resized_image, session=session, alpha_matting_erode_size = 1,alpha_matting_background_threshold = 70, alpha_foreground_background_threshold = 100, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
-            resized_image = remove(resized_image, session=session, alpha_matting_erode_size = 1, alpha_matting = True, bgcolor=background_removal_color + [0]).convert('RGB')
+            # resized_image = rembg.remove(resized_image, session=session, alpha_matting_erode_size = 1,alpha_matting_background_threshold = 70, alpha_foreground_background_threshold = 100, alpha_matting = True, bgcolor=[255, 255, 255, 0]).convert('RGB')
+            resized_image = rembg.remove(resized_image, session=session, alpha_matting_erode_size = 1, alpha_matting = True, bgcolor=background_removal_color + [0]).convert('RGB')
         if return_tensor:
             output_list.append(convert_image_to_tensor(resized_image).unsqueeze(1)) 
         else:
