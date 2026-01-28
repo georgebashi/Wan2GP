@@ -681,11 +681,21 @@ class family_handler():
             wan_files = ["Wan2.1_VAE.safetensors", "Wan2.1_VAE_upscale2x_imageonly_real_v1.safetensors"]
             if base_model_type in ["fantasy"]:
                 wan_files.append("fantasy_proj_model.safetensors")
-        download_def  = [{
-            "repoId" : "DeepBeepMeep/Wan2.1", 
-            "sourceFolderList" :  ["xlm-roberta-large", "umt5-xxl", ""  ],
-            "fileList" : [ [ "models_clip_open-clip-xlm-roberta-large-vit-huge-14-bf16.safetensors", "sentencepiece.bpe.model", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"], ["special_tokens_map.json", "spiece.model", "tokenizer.json", "tokenizer_config.json"], wan_files ]   
-        }]
+
+        # i2v_2_2 doesn't use CLIP, so skip downloading those files
+        uses_clip = not test_i2v_2_2(base_model_type)
+        if uses_clip:
+            download_def = [{
+                "repoId" : "DeepBeepMeep/Wan2.1",
+                "sourceFolderList" :  ["xlm-roberta-large", "umt5-xxl", ""  ],
+                "fileList" : [ [ "models_clip_open-clip-xlm-roberta-large-vit-huge-14-bf16.safetensors", "sentencepiece.bpe.model", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json"], ["special_tokens_map.json", "spiece.model", "tokenizer.json", "tokenizer_config.json"], wan_files ]
+            }]
+        else:
+            download_def = [{
+                "repoId" : "DeepBeepMeep/Wan2.1",
+                "sourceFolderList" :  ["umt5-xxl", ""  ],
+                "fileList" : [ ["special_tokens_map.json", "spiece.model", "tokenizer.json", "tokenizer_config.json"], wan_files ]
+            }]
 
         if base_model_type == "scail":
             # SCAIL pose extraction (NLFPose torchscript). Kept separate so it isn't downloaded for every model.
