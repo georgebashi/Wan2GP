@@ -43,7 +43,14 @@ class HuggingfaceTokenizer:
         self.clean = clean
 
         # init tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(name, local_files_only=True, **kwargs)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(name, local_files_only=True, **kwargs)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load tokenizer from '{name}' (local_files_only=True). "
+                f"Ensure tokenizer files (tokenizer_config.json, etc.) exist at this path. "
+                f"Original error: {e}"
+            ) from e
         self.vocab_size = self.tokenizer.vocab_size
 
     def __call__(self, sequence, **kwargs):

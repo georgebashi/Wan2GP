@@ -108,6 +108,9 @@ class GeneratorService:
                 try:
                     self.model_manager.load_model(model_type, job_id=job_id)
                 except Exception as e:
+                    import traceback
+                    print(f"[ERROR] Failed to load model '{model_type}': {e}")
+                    traceback.print_exc()
                     return GenerationResult(
                         success=False,
                         error=f"Failed to load model: {e}",
