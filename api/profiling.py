@@ -19,7 +19,8 @@ class ProfileManager:
         """Initialize ProfileManager with environment configuration."""
         enable_str = os.environ.get("ENABLE_PROFILING", "false").lower()
         self.enabled = enable_str == "true"
-        self.startup_id = uuid.uuid4().hex[:8]
+        # Use RunPod pod ID for startup profile, fall back to random UUID
+        self.startup_id = os.environ.get("RUNPOD_POD_ID", uuid.uuid4().hex[:8])
         self.profiler = None
         self.current_profile_name = None
         self.current_profile_id = None
