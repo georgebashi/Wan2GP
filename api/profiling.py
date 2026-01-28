@@ -42,8 +42,14 @@ class ProfileManager:
         if not self.enabled:
             return
 
+        # If a profiler is still active (e.g., from a failed request), stop it first
         if self.profiler is not None:
-            raise RuntimeError("Profiler already active")
+            print(f"[profiling] Warning: stopping orphaned profiler from {self.current_profile_name}/{self.current_profile_id}")
+            try:
+                self.stop()
+            except Exception as e:
+                print(f"[profiling] Error stopping orphaned profiler: {e}")
+                self.profiler = None
 
         self.profiler = Profiler(async_mode="enabled")
         self.current_profile_name = name
