@@ -1,9 +1,11 @@
 """ProfileManager for pyinstrument profiling with S3 upload support."""
 
 import os
+import time
 import uuid
 
 import boto3
+from botocore.config import Config
 from pyinstrument import Profiler
 from pyinstrument.renderers import SpeedscopeRenderer
 
@@ -67,28 +69,42 @@ class ProfileManager:
         self.stop()
 
     def _upload_profile(self):
-        """Render and upload profile data to S3."""
+        """Render and upload profile data to S3.
+
+        Uses the same S3 configuration as RunPod's rp_upload utility:
+        - BUCKET_ENDPOINT_URL
+        - BUCKET_ACCESS_KEY_ID
+        - BUCKET_SECRET_ACCESS_KEY
+        - Bucket name defaults to current month-year (e.g., "01-26")
+        """
         renderer = SpeedscopeRenderer()
         output = self.profiler.output(renderer)
 
         s3_key = f"profiles/{self.current_profile_name}/{self.current_profile_id}.speedscope"
 
         endpoint_url = os.environ.get("BUCKET_ENDPOINT_URL")
-        bucket_name = os.environ.get("BUCKET_NAME")
         access_key_id = os.environ.get("BUCKET_ACCESS_KEY_ID")
         secret_access_key = os.environ.get("BUCKET_SECRET_ACCESS_KEY")
+        # Match RunPod's bucket naming convention (month-year)
+        bucket_name = os.environ.get("BUCKET_NAME", time.strftime("%m-%y"))
 
-        if not all([endpoint_url, bucket_name, access_key_id, secret_access_key]):
+        if not all([endpoint_url, access_key_id, secret_access_key]):
             raise RuntimeError(
                 "Missing S3 credentials. Required env vars: "
-                "BUCKET_ENDPOINT_URL, BUCKET_NAME, BUCKET_ACCESS_KEY_ID, BUCKET_SECRET_ACCESS_KEY"
+                "BUCKET_ENDPOINT_URL, BUCKET_ACCESS_KEY_ID, BUCKET_SECRET_ACCESS_KEY"
             )
+
+        boto_config = Config(
+            signature_version="s3v4",
+            retries={"max_attempts": 3, "mode": "standard"}
+        )
 
         s3_client = boto3.client(
             "s3",
             endpoint_url=endpoint_url,
             aws_access_key_id=access_key_id,
             aws_secret_access_key=secret_access_key,
+            config=boto_config,
         )
 
         s3_client.put_object(
@@ -98,4 +114,4 @@ class ProfileManager:
             ContentType="application/json",
         )
 
-        print(f"[profiling] Uploaded {s3_key}")
+        print(f"[profiling] Uploaded s3://{bucket_name}/{s3_key}", flush=True)
