@@ -75,6 +75,7 @@ class GeneratorService:
         """
         # Handle dynamic model definition
         model_def = params.pop("model_def", None)
+        job_id = params.pop("job_id", None)
         model_type = params.get("model_type")
 
         force_reload = False
@@ -104,7 +105,7 @@ class GeneratorService:
         if model_type:
             if force_reload or not self.model_manager.is_loaded(model_type):
                 try:
-                    self.model_manager.load_model(model_type)
+                    self.model_manager.load_model(model_type, job_id=job_id)
                 except Exception as e:
                     return GenerationResult(
                         success=False,
