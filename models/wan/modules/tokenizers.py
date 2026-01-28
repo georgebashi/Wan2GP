@@ -43,7 +43,7 @@ class HuggingfaceTokenizer:
         self.clean = clean
 
         # init tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(name, **kwargs)
+        self.tokenizer = AutoTokenizer.from_pretrained(name, local_files_only=True, **kwargs)
         self.vocab_size = self.tokenizer.vocab_size
 
     def __call__(self, sequence, **kwargs):
