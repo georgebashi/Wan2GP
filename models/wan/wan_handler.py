@@ -675,7 +675,10 @@ class family_handler():
     
     @staticmethod
     def query_model_files(computeList, base_model_type, model_def=None):
-        if test_wan_5B(base_model_type):
+        # Skip default VAE files if model_def specifies custom VAE_URLs
+        has_custom_vae = model_def is not None and model_def.get("VAE_URLs")
+
+        if test_wan_5B(base_model_type) or has_custom_vae:
             wan_files = []
         else:
             wan_files = ["Wan2.1_VAE.safetensors", "Wan2.1_VAE_upscale2x_imageonly_real_v1.safetensors"]
