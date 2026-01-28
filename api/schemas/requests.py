@@ -115,8 +115,8 @@ class GenerationRequest(BaseModel):
     NAG_scale: float = Field(1.0, description="NAG scale")
     NAG_tau: float = Field(3.5, description="NAG tau")
     NAG_alpha: float = Field(0.5, description="NAG alpha")
-    skip_steps_cache_type: str = Field("", description="Step skipping cache type")
-    skip_steps_multiplier: float = Field(1.75, description="Step skip multiplier")
+    skip_steps_cache_type: str = Field("tea", description="Step skipping cache type")
+    skip_steps_multiplier: float = Field(1.5, description="Step skip multiplier")
     skip_steps_start_step_perc: float = Field(0, description="Step skip start percentage")
 
     # Output
