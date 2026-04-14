@@ -119,17 +119,17 @@ class family_handler():
         return {"qwen":(110, "Qwen")}
 
     @staticmethod
-    def register_lora_cli_args(parser):
+    def register_lora_cli_args(parser, lora_root):
         parser.add_argument(
             "--lora-dir-qwen",
             type=str,
-            default=os.path.join("loras", "qwen"),
-            help="Path to a directory that contains qwen images Loras"
+            default=None,
+            help=f"Path to a directory that contains qwen images Loras (default: {os.path.join(lora_root, 'qwen')})"
         )
 
     @staticmethod
-    def get_lora_dir(base_model_type, args):
-        return args.lora_dir_qwen
+    def get_lora_dir(base_model_type, args, lora_root):
+        return getattr(args, "lora_dir_qwen", None) or os.path.join(lora_root, "qwen")
 
     @staticmethod
     def query_model_files(computeList, base_model_type, model_def=None):
@@ -233,7 +233,8 @@ class family_handler():
     def custom_prompt_preprocess(prompt, video_guide_outpainting, model_mode, **kwargs):
         if model_mode == 0:
             # from wgp import get_outpainting_dims
-            if len(video_guide_outpainting) and not video_guide_outpainting.startswith("#") and video_guide_outpainting != "0 0 0 0":
+            outpainting_ratio = (kwargs.get("video_guide_outpainting_ratio") or "").strip()
+            if ((len(video_guide_outpainting) and not video_guide_outpainting.startswith("#") and video_guide_outpainting != "0 0 0 0") or (len(outpainting_ratio) > 0 and not video_guide_outpainting.startswith("#"))):
                 if not prompt.endswith("."): prompt += "."
                 prompt += "Remove the red paddings on the sides and show what's behind them."
         return prompt  

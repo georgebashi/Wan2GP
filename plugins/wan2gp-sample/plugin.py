@@ -18,9 +18,6 @@ def release_GPU(state):
 class ConfigTabPlugin(WAN2GPPlugin):
     def __init__(self):
         super().__init__()
-        self.name = PlugIn_Name
-        self.version = "1.0.0"
-        self.description = PlugIn_Name
 
     def setup_ui(self):
         self.request_global("get_current_model_settings")
@@ -43,6 +40,10 @@ class ConfigTabPlugin(WAN2GPPlugin):
 
 
     def on_tab_deselect(self, state: dict) -> None:
+        pass
+
+    def on_model_change(self, state: dict, model_type) -> None:
+        # print(f"new model selected is {model_type}")
         pass
 
     def create_config_ui(self):

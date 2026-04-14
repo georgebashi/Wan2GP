@@ -6,6 +6,8 @@
 *.gif
 *.bmp
 *.mp4
+*.webm
+*.npy
 *.mov
 *.mkv
 *.log
@@ -43,5 +45,9 @@ loras/
 loras_i2v/
 
 settings/
+!shared/deepy/settings/
+!shared/deepy/settings/**
 
 wgp_config.json
+plugins_local.json
+loras_url_cache.json

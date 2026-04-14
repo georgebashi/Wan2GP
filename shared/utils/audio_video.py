@@ -1,6 +1,7 @@
 import subprocess
 import tempfile, os
 import ffmpeg
+import struct
 import torchvision.transforms.functional as TF
 import torch.nn.functional as F
 import cv2
@@ -12,6 +13,9 @@ import torch
 from PIL import Image
 import os.path as osp
 import json
+import numpy as np
+import soundfile as sf
+import zlib
 
 def rand_name(length=8, suffix=''):
     name = binascii.b2a_hex(os.urandom(length)).decode('utf-8')
@@ -22,10 +26,148 @@ def rand_name(length=8, suffix=''):
     return name
 
 
+def _prepare_audio_array(audio_data):
+    if torch.is_tensor(audio_data):
+        audio_data = audio_data.detach().cpu().float().numpy()
+    else:
+        audio_data = np.asarray(audio_data, dtype=np.float32)
+    if audio_data.ndim == 2 and audio_data.shape[0] <= 8 and audio_data.shape[1] > audio_data.shape[0]:
+        audio_data = audio_data.T
+    return audio_data
 
-def extract_audio_tracks(source_video, verbose=False, query_only=False):
+
+def write_wav_file(path, audio_data, sample_rate):
+    audio_array = _prepare_audio_array(audio_data)
+    sf.write(path, audio_array, int(sample_rate))
+    return path
+
+
+def _compute_active_abs_amplitude(audio_data):
+    abs_audio = np.abs(np.asarray(audio_data, dtype=np.float32)).reshape(-1)
+    if abs_audio.size == 0:
+        return 0.0, 0.0
+    avg_abs = float(abs_audio.mean())
+    if avg_abs <= 0.0:
+        return 0.0, 0.0
+    threshold = 0.1 * avg_abs
+    active_mask = abs_audio > threshold
+    active_avg_abs = float(abs_audio[active_mask].mean()) if np.any(active_mask) else avg_abs
+    return avg_abs, active_avg_abs
+
+
+def normalize_audio_pair_volumes_to_temp_files(audio_path1, audio_path2, output_dir=None, prefix="audio_norm_"):
+    audio1, sr1 = sf.read(os.fspath(audio_path1), dtype="float32", always_2d=False)
+    audio2, sr2 = sf.read(os.fspath(audio_path2), dtype="float32", always_2d=False)
+
+    avg1, active1 = _compute_active_abs_amplitude(audio1)
+    avg2, active2 = _compute_active_abs_amplitude(audio2)
+    midpoint = 0.5 * (active1 + active2)
+    eps = 1e-8
+    gain1 = midpoint / active1 if active1 > eps else 1.0
+    gain2 = midpoint / active2 if active2 > eps else 1.0
+
+    norm1 = np.clip(np.asarray(audio1, dtype=np.float32) * float(gain1), -1.0, 1.0)
+    norm2 = np.clip(np.asarray(audio2, dtype=np.float32) * float(gain2), -1.0, 1.0)
+
+    if output_dir is not None:
+        os.makedirs(output_dir, exist_ok=True)
+
+    fd1, out1 = tempfile.mkstemp(prefix=prefix + "1_", suffix=".wav", dir=output_dir)
+    os.close(fd1)
+    fd2, out2 = tempfile.mkstemp(prefix=prefix + "2_", suffix=".wav", dir=output_dir)
+    os.close(fd2)
+    sf.write(out1, norm1, int(sr1))
+    sf.write(out2, norm2, int(sr2))
+
+    stats = {
+        "audio1_avg_abs": float(avg1),
+        "audio2_avg_abs": float(avg2),
+        "audio1_active_avg_abs": float(active1),
+        "audio2_active_avg_abs": float(active2),
+        "target_active_avg_abs": float(midpoint),
+        "audio1_gain": float(gain1),
+        "audio2_gain": float(gain2),
+    }
+    return out1, out2, stats
+
+
+def _get_audio_codec_settings(codec_key):
+    if not codec_key:
+        codec_key = "wav"
+    codec_key = str(codec_key).lower()
+    if codec_key == "mp3":
+        codec_key = "mp3_192"
+    settings = {
+        "wav": {"ext": "wav", "format": "wav"},
+        "mp3_128": {"ext": "mp3", "format": "mp3", "bitrate": "128k"},
+        "mp3_192": {"ext": "mp3", "format": "mp3", "bitrate": "192k"},
+        "mp3_320": {"ext": "mp3", "format": "mp3", "bitrate": "320k"},
+    }
+    return settings.get(codec_key, settings["wav"])
+
+
+def get_mp4_audio_codec_settings(codec_key):
+    codec_key = "aac_128" if not codec_key else str(codec_key).lower()
+    settings = {
+        "aac_128": {"codec": "aac", "bitrate": "128k", "ext": ".aac"},
+        "aac_192": {"codec": "aac", "bitrate": "192k", "ext": ".aac"},
+        "aac_256": {"codec": "aac", "bitrate": "256k", "ext": ".aac"},
+        "aac_320": {"codec": "aac", "bitrate": "320k", "ext": ".aac"},
+        "alac": {"codec": "alac", "bitrate": None, "ext": ".m4a"},
+    }
+    return settings.get(codec_key, settings["aac_128"])
+
+
+def get_audio_codec_extension(codec_key):
+    return _get_audio_codec_settings(codec_key)["ext"]
+
+
+def _run_ffmpeg_encode(input_path, output_path, codec, bitrate=None, sample_rate=None, drop_video=False):
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", input_path]
+    if drop_video:
+        cmd.append("-vn")
+    cmd += ["-c:a", codec]
+    if bitrate:
+        cmd += ["-b:a", bitrate]
+    if sample_rate:
+        cmd += ["-ar", str(int(sample_rate))]
+    cmd.append(output_path)
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+
+def save_audio_file(path, audio_data, sample_rate, codec_key="wav"):
+    settings = _get_audio_codec_settings(codec_key)
+    ext = settings["ext"]
+    if not path.lower().endswith(f".{ext}"):
+        path = osp.splitext(path)[0] + f".{ext}"
+    if settings["format"] == "wav":
+        return write_wav_file(path, audio_data, sample_rate)
+    fd, tmp_path = tempfile.mkstemp(suffix=".wav", prefix="audio_")
+    os.close(fd)
+    try:
+        write_wav_file(tmp_path, audio_data, sample_rate)
+        _run_ffmpeg_encode(tmp_path, path, "libmp3lame", bitrate=settings.get("bitrate"), sample_rate=sample_rate)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    return path
+
+
+def extract_audio_track_to_wav(video_path, output_path):
+    if not video_path:
+        return None
+    video_path = os.fspath(video_path)
+    import ffmpeg
+    ffmpeg.input(video_path).output(output_path, **{"map": "0:a:0", "acodec": "pcm_s16le"}).overwrite_output().run(quiet=True)
+    return output_path
+
+
+
+def extract_audio_tracks(source_video, verbose=False, query_only=False, codec_key="aac_128", temp_format=None):
     """
-    Extract all audio tracks from a source video into temporary AAC files.
+    Extract all audio tracks from a source video into temporary audio files.
 
     Returns:
         Tuple:
@@ -67,9 +209,13 @@ def extract_audio_tracks(source_video, verbose=False, query_only=False):
 
     file_paths = []
     metadata = []
+    if temp_format == "wav":
+        audio_settings = {"codec": "pcm_s16le", "bitrate": None, "ext": ".wav"}
+    else:
+        audio_settings = get_mp4_audio_codec_settings(codec_key)
 
     for i, stream in enumerate(audio_streams):
-        fd, temp_path = tempfile.mkstemp(suffix=f'_track{i}.aac', prefix='audio_')
+        fd, temp_path = tempfile.mkstemp(suffix=f'_track{i}{audio_settings["ext"]}', prefix='audio_')
         os.close(fd)
 
         file_paths.append(temp_path)
@@ -81,10 +227,10 @@ def extract_audio_tracks(source_video, verbose=False, query_only=False):
             'language': stream.get('tags', {}).get('language', None)
         })
 
-        ffmpeg.input(source_video).output(
-            temp_path,
-            **{f'map': f'0:a:{i}', 'acodec': 'aac', 'b:a': '128k'}
-        ).overwrite_output().run(quiet=not verbose)
+        output_kwargs = {f'map': f'0:a:{i}', 'acodec': audio_settings["codec"]}
+        if audio_settings["bitrate"]:
+            output_kwargs['b:a'] = audio_settings["bitrate"]
+        ffmpeg.input(source_video).output(temp_path, **output_kwargs).overwrite_output().run(quiet=not verbose)
 
     return file_paths, metadata
 
@@ -96,10 +242,12 @@ def combine_and_concatenate_video_with_audio_tracks(
     source_audio_duration, audio_sampling_rate,
     new_audio_from_start=False,
     source_audio_metadata=None,
-    audio_bitrate='128k',
-    audio_codec='aac',
+    audio_codec_key="aac_128",
     verbose = False
 ):
+    audio_settings = get_mp4_audio_codec_settings(audio_codec_key)
+    audio_codec = audio_settings["codec"]
+    audio_bitrate = audio_settings["bitrate"]
     inputs, filters, maps, idx = ['-i', video_path], [], ['-map', '0:v'], 1
     metadata_args = []
     sources = source_audio_tracks or []
@@ -162,10 +310,11 @@ def combine_and_concatenate_video_with_audio_tracks(
            *maps, *metadata_args,
            '-c:v', 'copy',
            '-c:a', audio_codec,
-           '-b:a', audio_bitrate,
            '-ar', str(audio_sampling_rate),
            '-ac', '1',
            '-shortest', save_path_tmp]
+    if audio_bitrate:
+        cmd[-6:-6] = ['-b:a', audio_bitrate]
 
     if verbose:
         print(f"ffmpeg command: {cmd}")
@@ -424,21 +573,85 @@ def _dec_uc(b):
     if b.startswith(b"UNICODE\0"):   return b[8:].decode("utf-16le", "ignore")
     return b.decode("utf-8", "ignore")
 
+
+def _blank_exif_dict():
+    return {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}, "thumbnail": None}
+
+
+def _load_exif_dict(image_path, ext):
+    import piexif
+    try:
+        if ext in (".jpg", ".jpeg"):
+            return piexif.load(image_path)
+        if ext == ".webp":
+            with Image.open(image_path) as im:
+                exif_bytes = im.info.get("exif")
+            return piexif.load(exif_bytes) if exif_bytes else _blank_exif_dict()
+    except Exception:
+        pass
+    return _blank_exif_dict()
+
+
+def _insert_exif_user_comment(image_path, comment_text, ext):
+    import piexif
+    exif_dict = _load_exif_dict(image_path, ext)
+    exif_dict.setdefault("Exif", {})
+    exif_dict["Exif"][piexif.ExifIFD.UserComment] = _enc_uc(comment_text)
+    piexif.insert(piexif.dump(exif_dict), image_path)
+
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _build_png_chunk(chunk_type, data):
+    return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", zlib.crc32(chunk_type + data) & 0xffffffff)
+
+
+def _is_png_comment_chunk(chunk_type, data):
+    if chunk_type not in {b"tEXt", b"zTXt", b"iTXt"}:
+        return False
+    return data.split(b"\x00", 1)[0] == b"comment"
+
+
+def _write_png_comment_metadata(image_path, comment_text):
+    raw = open(image_path, "rb").read()
+    if not raw.startswith(_PNG_SIGNATURE):
+        raise ValueError("Invalid PNG signature")
+    comment_chunk = _build_png_chunk(b"iTXt", b"comment\x00\x00\x00\x00\x00" + comment_text.encode("utf-8"))
+    out = bytearray(_PNG_SIGNATURE)
+    pos = len(_PNG_SIGNATURE)
+    inserted = False
+    while pos < len(raw):
+        if pos + 8 > len(raw):
+            raise ValueError("Corrupted PNG chunk header")
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        chunk_type = raw[pos + 4:pos + 8]
+        end = pos + 12 + length
+        if end > len(raw):
+            raise ValueError("Corrupted PNG chunk payload")
+        chunk_data = raw[pos + 8:pos + 8 + length]
+        chunk = raw[pos:end]
+        pos = end
+        if _is_png_comment_chunk(chunk_type, chunk_data):
+            continue
+        if not inserted and chunk_type == b"IDAT":
+            out.extend(comment_chunk)
+            inserted = True
+        out.extend(chunk)
+    if not inserted:
+        raise ValueError("PNG image data chunk not found")
+    with open(image_path, "wb") as writer:
+        writer.write(out)
+
 def save_image_metadata(image_path, metadata_dict, **save_kwargs):
     try:
         j = json.dumps(metadata_dict, ensure_ascii=False)
         ext = os.path.splitext(image_path)[1].lower()
-        with Image.open(image_path) as im:
-            if ext == ".png":
-                pi = PngImagePlugin.PngInfo(); pi.add_text("comment", j)
-                im.save(image_path, pnginfo=pi, **save_kwargs); return True
-            if ext in (".jpg", ".jpeg"):
-                im.save(image_path, comment=j.encode("utf-8"), **save_kwargs); return True
-            if ext == ".webp":
-                import piexif
-                exif = {"0th":{}, "Exif":{piexif.ExifIFD.UserComment:_enc_uc(j)}, "GPS":{}, "1st":{}, "thumbnail":None}
-                im.save(image_path, format="WEBP", exif=piexif.dump(exif), **save_kwargs); return True
-            raise ValueError("Unsupported format")
+        if ext == ".png":
+            _write_png_comment_metadata(image_path, j); return True
+        if ext in (".jpg", ".jpeg", ".webp"):
+            _insert_exif_user_comment(image_path, j, ext); return True
+        raise ValueError("Unsupported format")
     except Exception as e:
         print(f"Error saving metadata: {e}"); return False
 
@@ -450,6 +663,14 @@ def read_image_metadata(image_path):
                 val = (getattr(im, "text", {}) or {}).get("comment") or im.info.get("comment")
                 return json.loads(val) if val else None
             if ext in (".jpg", ".jpeg"):
+                import piexif
+                try:
+                    uc = piexif.load(image_path).get("Exif", {}).get(piexif.ExifIFD.UserComment)
+                    s = _dec_uc(uc) if uc else None
+                    if s:
+                        return json.loads(s)
+                except Exception:
+                    pass
                 val = im.info.get("comment")
                 if isinstance(val, (bytes, bytearray)): val = val.decode("utf-8", "ignore")
                 if val:
@@ -464,12 +685,13 @@ def read_image_metadata(image_path):
                         except Exception: pass
                 return None
             if ext == ".webp":
-                exif_bytes = Image.open(image_path).info.get("exif")
-                if not exif_bytes: return None
                 import piexif
+                exif_bytes = im.info.get("exif")
+                if not exif_bytes: return None
                 uc = piexif.load(exif_bytes).get("Exif", {}).get(piexif.ExifIFD.UserComment)
                 s = _dec_uc(uc) if uc else None
                 return json.loads(s) if s else None
             return None
     except Exception as e:
         print(f"Error reading metadata: {e}"); return None
+

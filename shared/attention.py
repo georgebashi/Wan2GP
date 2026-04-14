@@ -4,9 +4,17 @@ from importlib.metadata import version
 from mmgp import offload
 import torch.nn.functional as F
 import warnings
+from importlib.metadata import version
 
 major, minor = torch.cuda.get_device_capability(None)
 bfloat16_supported =  major >= 8 
+
+try:
+    import triton
+    triton_installed = True
+except:
+    triton_installed = False
+
 
 try:
     from xformers.ops import memory_efficient_attention
@@ -46,7 +54,12 @@ try:
     from spas_sage_attn import block_sparse_sage2_attn_cuda
 except ImportError:
     block_sparse_sage2_attn_cuda = None
-
+    if not triton_installed: 
+        try:
+            sg2_version = version("sageattention")
+            print("Sage Attention has been detected but it won't work until Triton is installed.")
+        except ImportError:
+            pass
 
 try:
     from .sage2_core import sageattn as sageattn2, is_sage2_supported
@@ -54,29 +67,51 @@ try:
 except ImportError:
     sageattn2 = None
     sage2_supported = False
+    if not triton_installed: 
+        try:
+            sg2_version = version("sageattention")
+            if not triton_installed: print("Sage Attention 2 has been detected but it won't work until Triton is installed.")
+        except ImportError:
+            pass
+
 @torch.compiler.disable()
 def sageattn2_wrapper(
         qkv_list,
-        attention_length
+        attention_length,
+        recycle_q = False,
     ):
     q,k, v = qkv_list
     qkv_list = [q,k,v]
     del q, k ,v
-    o = sageattn2(qkv_list, tensor_layout="NHD")
+    o = sageattn2(qkv_list, tensor_layout="NHD", recycle_q = recycle_q)
     qkv_list.clear()
 
     return o
 
 try:
     from sageattn import sageattn_blackwell as sageattn3
+    if not triton_installed:
+        print("Sage Attention 3 is installed but it won't be supported until Triton is installed.")
 except ImportError:
     sageattn3 = None
+    if not triton_installed: 
+        try:
+            sg3_version = version("sageattn_blackwell")
+            print("Sage Attention 3 has been detected but it won't work until Triton is installed.")
+        except ImportError:
+            pass
 
 if sageattn3 is None:
     try:
         from sageattn3 import sageattn3_blackwell as sageattn3 #word0 windows version
     except ImportError:
         sageattn3 = None
+        if not triton_installed: 
+            try:
+                sg3_version = version("sageattn3_blackwell")
+                print("Sage Attention 3 has been detected but it won't work until Triton is installed.")
+            except ImportError:
+                pass
 
 @torch.compiler.disable()
 def sageattn3_wrapper(
@@ -166,17 +201,17 @@ def get_attention_modes():
 def get_supported_attention_modes():
     ret = get_attention_modes()
     major, minor = torch.cuda.get_device_capability()
-    if  major < 10:
+    if  major < 10 or not triton_installed:
         if "sage3" in ret:
             ret.remove("sage3")
 
-    if not sage2_supported:
+    if not sage2_supported or not triton_installed:
         if "sage2" in ret:
             ret.remove("sage2")
         if "radial" in ret:
             ret.remove("radial")
 
-    if  major < 7:
+    if major < 7 or not triton_installed:
         if "sage" in ret:
             ret.remove("sage")
 
@@ -210,7 +245,7 @@ def pay_attention(
     version=None,
     force_attention= None,
     attention_mask = None,
-    cross_attn= False,
+    recycle_q = False,
     q_lens = None,
     k_lens = None,
 ):
@@ -327,81 +362,18 @@ def pay_attention(
             max_seqlen_kv=lk,
         ).unflatten(0, (b, lq))
     elif attn=="sage3":
-        import math
-        if cross_attn or True:
-            qkv_list = [q,k,v]
-            del q,k,v
-            x = sageattn3_wrapper(qkv_list, lq)
+        qkv_list = [q,k,v]
+        del q,k,v
+        x = sageattn3_wrapper(qkv_list, lq)
     elif attn=="sage2":
-        import math
-        if cross_attn or True:
-            qkv_list = [q,k,v]
-            del q,k,v
-
-            x = sageattn2_wrapper(qkv_list, lq) #.unsqueeze(0)
-        # else:
-        #     layer =  offload.shared_state["layer"]
-        #     embed_sizes = offload.shared_state["embed_sizes"] 
-        #     current_step = offload.shared_state["step_no"] 
-        #     max_steps = offload.shared_state["max_steps"]  
-
-
-        #     nb_latents =  embed_sizes[0] * embed_sizes[1]* embed_sizes[2]
-
-        #     window = 0
-        #     start_window_step = int(max_steps * 0.3)
-        #     start_layer = 10
-        #     end_layer = 30
-        #     if (layer < start_layer or layer > end_layer )  or current_step <start_window_step: 
-        #         window = 0
-        #     else:
-        #         # coef =  min((max_steps - current_step)/(max_steps-start_window_step),1)*max(min((25 - layer)/(25-start_layer),1),0) * 0.7 + 0.3
-        #         coef = 0.3
-        #         print(f"step: {current_step}, layer: {layer}, coef:{coef:0.1f}]")
-        #         window =  math.ceil(coef* nb_latents)
-
-        #     invert_spaces = (layer + current_step) % 2 == 0 and window > 0
-        #     invert_spaces = False
-        #     def flip(q):
-        #         q = q.reshape(*embed_sizes, *q.shape[-2:])
-        #         q = q.transpose(0,2)
-        #         q = q.contiguous()
-        #         q = q.transpose(0,2)
-        #         q = q.reshape( -1, *q.shape[-2:])
-        #         return q
-
-        #     def flop(q):
-        #         q = q.reshape(embed_sizes[2], embed_sizes[1], embed_sizes[0] , *q.shape[-2:])
-        #         q = q.transpose(0,2)
-        #         q = q.contiguous()
-        #         q = q.transpose(0,2)
-        #         q = q.reshape( -1, *q.shape[-2:])
-        #         return q
-
-
-        #     if invert_spaces:
-
-        #         q = flip(q)
-        #         k = flip(k)
-        #         v = flip(v)            
-        #     qkv_list = [q,k,v]
-        #     del q,k,v
-
-
-
-        #     x = sageattn_window_wrapper(qkv_list, lq, window= window) #.unsqueeze(0)
-
-        #     if invert_spaces:
-        #         x = flop(x)
-        #     x = x.unsqueeze(0)
-
-        
+        qkv_list = [q,k,v]
+        del q,k,v
+        x = sageattn2_wrapper(qkv_list, lq, recycle_q = recycle_q)
     elif attn=="sdpa":
         qkv_list = [q, k, v]
         del q ,k ,v
         x = sdpa_wrapper( qkv_list, lq, attention_mask = attention_mask) #.unsqueeze(0)
     elif attn=="flash" and version == 3:
-        # Note: dropout_p, window_size are not supported in FA3 now.
         x = flash_attn_interface.flash_attn_varlen_func(
             q=q,
             k=k,
