@@ -59,16 +59,26 @@ from shared.utils.process_locks import (
     set_main_generation_running,
     unregister_GPU_resident,
 )
-from shared.deepy.config import get_deepy_default_runtime_config, set_deepy_runtime_config
 from shared.loras_migration import migrate_loras_layout
 from huggingface_hub import hf_hub_download, snapshot_download
-from shared.utils import files_locator as fl 
-from shared.gradio.audio_gallery import AudioGallery  
-from shared.utils.self_refiner import normalize_self_refiner_plan, ensure_refiner_list, add_refiner_rule, remove_refiner_rule
-from shared.deepy import controller as deepy_controller
-from shared.deepy import cli as deepy_cli
-from shared.deepy import gradio_ui as deepy_gradio_ui
-from shared import extra_settings
+from shared.utils import files_locator as fl
+
+if API_ONLY:
+    AudioGallery = None
+    deepy_controller = None
+    deepy_cli = None
+    deepy_gradio_ui = None
+    extra_settings = None
+    normalize_self_refiner_plan = ensure_refiner_list = add_refiner_rule = remove_refiner_rule = None
+    get_deepy_default_runtime_config = set_deepy_runtime_config = None
+else:
+    from shared.gradio.audio_gallery import AudioGallery
+    from shared.utils.self_refiner import normalize_self_refiner_plan, ensure_refiner_list, add_refiner_rule, remove_refiner_rule
+    from shared.deepy.config import get_deepy_default_runtime_config, set_deepy_runtime_config
+    from shared.deepy import controller as deepy_controller
+    from shared.deepy import cli as deepy_cli
+    from shared.deepy import gradio_ui as deepy_gradio_ui
+    from shared import extra_settings
 import torch
 import gc
 import traceback
