@@ -1,5 +1,9 @@
 ############# WanGP Copyright DeepBeepMeep 2025-2026 #############
 import os, sys
+
+# API-only mode skips heavy UI imports (gradio, etc.) for faster startup
+API_ONLY = os.environ.get("WANGP_API_ONLY", "0") == "1"
+
 os.environ["GRADIO_LANG"] = "en"
 # # os.environ.pop("TORCH_LOGS", None)  # make sure no env var is suppressing/overriding
 # os.environ["TORCH_LOGS"]= "recompiles"
